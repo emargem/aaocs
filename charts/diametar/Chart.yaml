@@ -1,0 +1,15 @@
+apiVersion: v2
+name: diametar
+description: diametar
+
+# application | library
+type: application
+
+# This is the chart version. Semantic Versioning (https://semver.org/)
+version: 13.3.1-0
+
+# This is the version number of the application being deployed.
+appVersion: "13.3.1-0"
+
+dependencies:
+

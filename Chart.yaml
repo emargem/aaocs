@@ -1,0 +1,33 @@
+apiVersion: v2
+name: aa
+description: aa
+
+# application | library
+type: application
+
+# This is the chart version. Semantic Versioning (https://semver.org/)
+version: 13.3.1-0
+
+# This is the version number of the application being deployed.
+appVersion: "13.3.1-0"
+
+dependencies:
+- condition: disteventos.enabled
+  name: disteventos
+  version: '>0.0.0-0'
+- condition: cdrs.enabled
+  name: cdrs
+  version: '>0.0.0-0'
+- condition: diametar.enabled
+  name: diametar
+  version: '>0.0.0-0'
+- condition: diamdatos.enabled
+  name: diamdatos
+  version: '>0.0.0-0'
+- condition: sharedconfman.enabled
+  name: sharedconfman
+  version: '>0.0.0-0'
+- condition: monitor.enabled
+  name: monitor
+  version: '>0.0.0-0'
+

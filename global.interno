@@ -1,0 +1,16 @@
+# global. sobreescribe el particular si se define. 
+# Solo permitido para los siguientes valores
+# global:
+#   env: (Definir cualquier variable que se quiera sobreescribir/añadir a nivel global). Siempre comentado en este fichero de chart.
+#   image:
+#     repository: # Debe incluir el path completo donde se encuentra la imagen. No el nombre de la imagen. Ejemplo zape-k8s-dockreg:5000/ o zape-k8s-dockreg:5000/altamira/
+#     pullPolicy:
+# Revisar que mas tiene sentido para el global, securityContext??, lo de prometheus (anotaciones)
+global:
+  # env: 
+  # VARIABLE:
+  #   value: <>
+  image:
+    # en este fichero de values, siempre vacio. Rellenar en user values si se quiere sobreescribir
+    repository: 
+    pullPolicy:

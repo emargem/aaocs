@@ -1,0 +1,185 @@
+# Default values for aachart. disteventos
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+#
+# Activa la instalacion del chart. Util para instalaciones globales
+enabled: true
+
+# Si se define como global (chart umbrella) estos valores serán sobreescritos con el valor global. 
+image:
+  # -- Repositorio de donde bajar los contenedores. Debe incluir el path completo incluyendo la / final.
+  repository: zape-k8s-dockreg:5000/
+  # Politica de pull
+  pullPolicy: IfNotPresent
+
+env:
+  # -- Nivel de trazas del proceso: 0-Todas. 1-Solo de error e informativas
+  NIVEL_TRAZAS:
+    value:  "0"
+  # -- Tipo de exporter de OpenTelemetry.  0-Ninguno, 1-Logs, 2-JaegerUDP, 3-JaegerHTTP
+  CNF_OPENTELEMETRY_EXPORTER_TIPO:
+    value: "0"
+  # -- Host donde se envian los intervalos de OpenTelemetry (en conjuncion con CNF_OPENTELEMETRY_EXPORTER_PORT)
+  # Si es por UDP, se suele enviar a localhots o a un DaemonSet (indicando en CNF_OPENTELEMETRY_EXPORTER_HOST status.hostIP)
+  # Si es por HTTP se pone la direccion del jaeger agent, por ejemplo jaeger-agent.jaeger
+  CNF_OPENTELEMETRY_EXPORTER_HOST:
+    value: "jaeger-agent.jaeger"
+  # -- Puerto donde se envian los intervalos de OpenTelemetry (en conjuntcion con CNF_OPENTELEMETRY_EXPORTER_HOST)
+  CNF_OPENTELEMETRY_EXPORTER_PORT:
+    value: "6831"
+  # -- Uso de cifrado en las conexiones 0MQ (las claves deben proporcionarse en el zmq-secret). Los procesos
+  #    de FED y BELS tienen que tener la misma configuración
+  CNF_ZMQ_CIFRADO:
+    value: "1"
+  # -- Variable para definir si la comunicacion con la BD se hace encriptada o no.
+  # Valor 0 indica no encriptada, valor 1 encriptada.
+  # @default -- ...
+  DATABASE_ENCRYPT:
+    value: "1"
+  # -- Servicio AA para el que se despliega este chart (Etiqueta e Identificador)
+  SERVICIO:
+    value: "PREPAGO"
+  SERVICIO_ID:
+    value: "1"
+  # -- Celula en la que se despliega el chart. Por defecto celula 1.
+  CELULA:
+    value: "1"
+  # -- Variable para forzar que los procesos se comuniquen solo con funcionalides de la misma celula. Por defecto 0 para evitarlo.
+  CNF_ZMQ_SOLO_MISMA_CELULA:
+    value: "0"
+  # -- Numero de instancias de un servidor que debe haber en tu mismo nodo para activar el envio solo a instancias de 
+  #    tu mismo nodo worker (0 para desactivar la funcionalidad)
+  CNF_ZMQ_UMBRAL_ENVIO_MISMO_NODO:
+    value: "0"
+  # -- Variable para definir el número de segundos que se mantienevivo  el pod una vez que se ha muerto el proceso. Util para depuracion
+  SLEEP_AL_TERMINAR:
+    value: "0"
+
+disteventos:
+  # -- Activacion de la funcionalidad 
+  enabled: true
+  # -- Numero de instancias del distEventos que se levantan 
+  replicaCount: 1
+  # -- Numero de instancias del distEventos que se levantan dentro del POD
+  instanciaCount: 1
+  # -- Nombre de la funcionalidad que se esta desplegando 
+  funcionalidad: DIST_EVENTOS
+  # -- Identificador (tabla AD) de la funcionalidad que se esta desplegando
+  funcionalidad_id: 28
+  # Servicios de entrada de trafico Gy
+  #service:
+  #  # -- Tipo de servicio de entrada del interface Gy
+  #  type: NodePort
+  #  # -- Puerto interno donde recibir conexiones del interface Gy
+  #  port: 31017
+  #  # -- Puerto externo donde recibir conexiones del interface Gy
+  #  nodePort: 31017
+  image:
+    # -- Repositorio de donde bajar el contenedor del diameterdatos (version en Chart.yaml/appVersion). Si se define sobreescribe al valor comun. Debe incluir el path completo incluyendo la / final.
+    repository: #zape-k8s-dockreg:5000/
+    # -- Nomre de la imagen del disteventos 
+    imageName: disteventos
+    # @ignored al generar doc automatica
+    pullPolicy: #IfNotPresent
+    # @ignored al generar doc automatica
+    #  tag: "x.y.z-n"
+
+exporter:
+  image:
+    # -- Repositorio de donde bajar el contenedor del exportador de metricas, para llevar los contadores de disteventos a prometheus. Si se define sobreescribe al valor comun. Debe incluir el path completo incluyendo la / final.
+    repository: #zape-k8s-dockreg:5000/
+    # -- Nomre de la imagen del exporter 
+    imageName: metrics_aa_exporter
+    # @ignored al generar doc automatica
+    pullPolicy: #IfNotPresent
+    # @ignored al generar doc automatica
+    tag: 1.0.1
+
+  resources:
+    limits:
+      cpu: "50m"
+      memory: "10Mi"
+
+base:
+  image:
+    # -- Repositorio de donde bajar el contenedor del exportador de metricas, para llevar los contadores de disteventos a prometheus. Si se define sobreescribe al valor comun. Debe incluir el path completo incluyendo la / final.
+    repository: #zape-k8s-dockreg:5000/
+    # -- Nomre de la imagen del exporter 
+    imageName: altamira-base
+    # @ignored al generar doc automatica
+    pullPolicy: #IfNotPresent
+    # @ignored al generar doc automatica
+    tag: 1.0.1
+podAnnotations:
+  # -- Anotacion para indicar a prometheus que debe recopilar metricas de estos pods
+  prometheus.io/scrape: 'true'
+  # -- Puerto donde se sirven las metricas
+  prometheus.io/port: '9100'
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# HPA para hacer autoescalado horizontal 
+autoscaling:
+  # -- Activacion del HPA 
+  enabled: true
+  # -- Numero minimo de instancias 
+  minReplicas: 1
+  # -- Numero maximo de instancias 
+  maxReplicas: 5
+  # -- Umbral de consumo de CPU de una instancia para que el HPA escale
+  # En API autoscaling/v1 el valor debe ser en porcentaje (70 = 70% de los cores reservados. p.ej con resources.requests.cpu=1 70% es el 70% de una CPU) 
+  # En API autoscaling/v2beta2 el valor debe ser en unidades de cores (700m son 700 milicores de 1 CPU = 70% de una CPU)
+  targetCPUUtilizationValue: 700m
+  targetCPUUtilizationValuev1: 70
+  # Indicador de si la Version de API utilizada para autoscaling es v1.
+  versionAPIv1: true
+
+# -- Recursos de CPU. Limite y requests. Son valores aplicados unicamente a los contenedores proceso 
+# Es necesario su definicion para el uso de HPA con autoscaling/v1
+resources:
+  limits:
+    cpu: 1
+  requests:
+    cpu: 1
+
+# PVC      
+#
+pvc:
+  # Definir si se usa un PVC precreado externamente o se crea en la instalacion del chart. 
+  # pvcExistente define el nombre del PVC a utilizar. Si se deja vacio se asume dinamico y el PVC será creado en la instalacion del chart.
+  pvcExistente: 
+  # En caso de creacion dinamica del PVC se definirá
+  # storageClassName: Nombre del storage class utilizado para crear el PVC.
+  # size: Tamaño del PVC
+  # accessMode: Modo de acceso. ReadWriteOnce o ReadWriteMany
+  # retain: (true/false). Si se selecciona false, el PVC será destruido en la desinstalación del chart y los datos contenidos se perderán.
+  dinamico:
+    storageClassName: standard
+    size: 1Gi
+    accessMode: ReadWriteOnce
+    retain: true
+
+podSecurityContext:
+
+securityContext:
+  # @ignored al generar doc automatica
+  runAsNonRoot: true
+  # @ignored al generar doc automatica
+  allowPrivilegeEscalation: false
+  # @ignored al generar doc automatica
+  capabilities:
+    drop:
+       - ALL
+    add: []
+    # systrace es para strace, pstack y gdb
+    # netadmin y netraw son para ping.
+    # el resto para tcpdump
+    #add: ["SYS_PTRACE","NET_ADMIN","NET_RAW","SETUID", "SETGID","CHOWN","DAC_OVERRIDE","FOWNER","FSETID","KILL","SETUID","SETPCAP","NET_BIND_SERVICE","SYS_CHROOT","MKNOD","AUDIT_WRITE","SETFCAP"]
+

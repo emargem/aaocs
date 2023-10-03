@@ -1,0 +1,219 @@
+# Default values for aachart.cdrs 
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Activa la instalacion del chart. Util para instalaciones globales
+enabled: true
+
+# Si se define como global (chart umbrella) estos valores serán sobreescritos con el valor global. 
+image:
+  # -- Repositorio de donde bajar los contenedores. Debe incluir el path completo incluyendo la / final.
+  repository: zape-k8s-dockreg:5000/
+  # Politica de pull
+  pullPolicy: IfNotPresent
+
+env:
+  # -- Nivel de trazas del proceso: 0-Todas. 1-Solo de error e informativas
+  NIVEL_TRAZAS:
+    value:  "0"
+  # -- Tipo de exporter de OpenTelemetry.  0-Ninguno, 1-Logs, 2-JaegerUDP, 3-JaegerHTTP
+  CNF_OPENTELEMETRY_EXPORTER_TIPO:
+    value: "0"
+  # -- Host donde se envian los intervalos de OpenTelemetry (en conjuncion con CNF_OPENTELEMETRY_EXPORTER_PORT)
+  # Si es por UDP, se suele enviar a localhost o a un DaemonSet (indicando en CNF_OPENTELEMETRY_EXPORTER_HOST status.hostIP)
+  # Si es por HTTP se pone la direccion del jaeger agent, por ejemplo jaeger-agent.jaeger
+  CNF_OPENTELEMETRY_EXPORTER_HOST:
+    value: "jaeger-agent.jaeger"
+  # -- Puerto donde se envian los intervalos de OpenTelemetry (en conjuncion con CNF_OPENTELEMETRY_EXPORTER_HOST)
+  CNF_OPENTELEMETRY_EXPORTER_PORT:
+    value: "6831"
+  # -- Uso de cifrado en las conexiones 0MQ (las claves deben proporcionarse en el zmq-secret). Los procesos
+  #    de FED y BELS tienen que tener la misma configuración
+  CNF_ZMQ_CIFRADO:
+    value: "1"
+  # -- Variable para definir si la comunicacion con la BD se hace encriptada o no.
+  # Valor 0 indica no encriptada, valor 1 encriptada.
+  DATABASE_ENCRYPT:
+    value: "1"
+  # -- Servicio AA para el que se despliega este chart (Etiqueta e Identificador)
+  SERVICIO:
+    value: "PREPAGO"
+  SERVICIO_ID:
+    value: "1"
+  # -- Celula en la que se despliega el chart. Por defecto celula 1.
+  CELULA:
+    value: "1"
+  # -- Variable para forzar que los procesos se comuniquen solo con funcionalides de la misma celula. Por defecto 0 para evitarlo.
+  CNF_ZMQ_SOLO_MISMA_CELULA:
+    value: "0"
+  # -- Tratamiento ante SIGTERM. 0-para, 2-indisponible y continua procesando lo que haya pendiente
+  CNF_TRATAMIENTO_SIGTERM_CLOUD:
+    value: "2"
+  # -- Numero de instancias de un servidor que debe haber en tu mismo nodo para activar el envio solo a instancias de 
+  #    tu mismo nodo worker (0 para desactivar la funcionalidad)
+  CNF_ZMQ_UMBRAL_ENVIO_MISMO_NODO:
+    value: "0"
+  # -- Variable para definir el número de segundos que se mantienevivo  el pod una vez que se ha muerto el proceso. Util para depuracion
+  SLEEP_AL_TERMINAR:
+    value: "0"
+
+gencdr:
+  # -- Funcionalidad para gencdr (nombre)
+  funcionalidad: "GENCDR"
+  # -- Funcionalidad para gencdr (id)
+  funcionalidadId: "29"
+
+  image:
+    # -- Repositorio de donde bajar el contenedor del gencdr. Si se define sobreescribe el valor comun. Debe incluir el path completo incluyendo la / final.
+    repository: #zape-k8s-dockreg:5000/
+    # -- Nomre de la imagen del gencdr 
+    imageName: gencdr
+    # @ignored al generar doc automatica
+    pullPolicy: #IfNotPresent
+    # @ignored al generar doc automatica
+    tag: "13.3.1-0"
+
+  resources:
+
+transcdr:
+  # -- Funcionalidad para transcdr (nombre)
+  funcionalidad: "TRANSCDR"
+  # -- Funcionalidad para transcdr (id)
+  funcionalidadId: "30"
+
+  # -- Tamaño de bloque de envio
+  tamBloque:  10000
+  # -- Proceso al que se envían los CDRs cuando DISTRIBUCION_REPARTO esta desactivado
+  procRecepcionCDRs: "RCVCDR"
+  # -- IP a la que se envian los CDRs cuando DISTRIBUCION_REPARTO esta desactivada
+  ipRecepcionCDRs: "127.0.0.1"
+
+  image:
+     # -- Repositorio de donde bajar el contenedor del transcdr. Si se define sobreescribe al valor comun. Debe incluir el path completo incluyendo la / final.
+     repository: #zape-k8s-dockreg:5000/
+     # -- Nombre de la imagen del gencdr 
+     imageName: transcdr
+     # @ignored al generar doc automatica
+     pullPolicy: #IfNotPresent
+     # @ignored al generar doc automatica
+     tag: "13.3.1-0"
+
+  resources:
+
+# -- Indica si se despliega como daemonset o como deployment
+despliegueDaemonset: true
+
+# -- Numero de PODS gencdr+transcdr en un despliegue Deployment. En un despliegue daemonset se levanta un POD por nodo
+#    En un despliegue de tipo deployment se levantan &lt;replicasDeployment&gt; PODs repartidos entre los nodos, cada uno con &lt;instancias&gt; instancias
+#    La relacion gencdr-transcdr es 1-1 con lo que siempre se despliegan los mismos trans que gen
+replicasDeployment: 1
+
+# -- Numero de instancias de gencdr y transcdr dentro de cada POD. Aplica tanto a daemonset como a deployment
+instancias: 1
+
+exporter:
+  image:
+    # -- Repositorio de donde bajar el contenedor del exportador de metricas, para llevar los contadores del proceso prometheus. Si se define sobreescribe al valor comun. Debe incluir el path completo incluyendo la / final.
+    repository: #zape-k8s-dockreg:5000/
+    # -- Nomre de la imagen del gencdr 
+    imageName: metrics_aa_exporter
+    # @ignored al generar doc automatica
+    pullPolicy: #IfNotPresent
+    # @ignored al generar doc automatica
+    tag: "1.0.1"
+
+  resources:
+    limits:
+      cpu: "50m"
+      memory: "10Mi"
+
+podAnnotations:
+  # -- Anotacion para indicar a prometheus que debe recopilar metricas de estos pods
+  prometheus.io/scrape: 'true'
+  # -- Puerto donde se sirven las metricas
+  prometheus.io/port: '9100'
+
+# @ignored al generar doc automatica
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+pvc:
+  # Con almacenamiento estatico, debe crearse por fuera storageClass sin provisionador, PV y PVC. El nombre del PVC se indica en pvcExistente
+  # Con almacenamiento dinamico, debe crearse por fuera storageClass con provisionador. Debe configurarse la parte 'dinamico' y dejarse vacio 'pvcExistente' 
+  # -- Nombre del PVC precreado externamente. Si se deja vacio se asume dinamico y el PVC será creado en la instalacion del chart.
+  pvcExistente:
+  dinamico:
+    # -- Nombre de la clase que proporciona el PV al gencdr
+    storageClassName: gencdr
+    # -- Tamaño de disco que se va a solicitar en el PVC para los ficheros de CDRs
+    size: 100Gi
+    accessMode: ReadWriteOnce
+    retain: true
+
+podSecurityContext:
+
+# -- configuracion de seguridad del container, para activar sólo las capabilities necesarias. En un entorno de producción
+#    lo recomendable es dejar todas desactivadas, ya que sólo se usan para depuración y no son necesarias para el servicio
+securityContext:
+  # @ignored al generar doc automatica
+  runAsNonRoot: true
+  # @ignored al generar doc automatica
+  allowPrivilegeEscalation: false
+  # @ignored al generar doc automatica
+  capabilities:
+    drop:
+       - ALL
+    add: []
+    # systrace es para strace, pstack y gdb
+    # netadmin y netraw son para ping.
+    # el resto para tcpdump
+    #add: ["SYS_PTRACE","NET_ADMIN","NET_RAW","SETUID", "SETGID","CHOWN","DAC_OVERRIDE","FOWNER","FSETID","KILL","SETUID","SETPCAP","NET_BIND_SERVICE","SYS_CHROOT","MKNOD","AUDIT_WRITE","SETFCAP"]
+
+
+# @ignored al generar doc automatica
+podSecurityContext:
+
+kafka:
+  # -- Activa el envio de ficheros de CDR a kafka
+  envio: false
+  image:
+    # -- Repositorio de donde bajar el contenedor del enviokafka. Si se define sobreescribe al valor comun. Debe incluir el path completo incluyendo la / final.
+    repository: #zape-k8s-dockreg:5000/
+    # -- Nomre de la imagen del gencdr 
+    imageName: enviokafka
+    # @ignored al generar doc automatica
+    pullPolicy: #IfNotPresent
+    # @ignored al generar doc automatica
+#    tag: "x.y.z-n"
+
+  resources: 
+
+  replicas:
+    normal:
+      # -- Broker kafka al que enviar los ficheros de CDRs
+      broker: "kafka-headless.default"
+      # -- Topico kafka al que enviar los ficheros de CDRs
+      topic: "cdrs"
+      # -- Directorio del volumen de CDRs que se envia a Kafka (si se mandan al SG, deberia ser TRANSMITIDOS)
+      dirIN: "CDR_SG/TRANSMITIDOS/NORMAL"
+      # -- Directorio del volumen de CDRs donde se mueven los ficheros tras su envio a Kafka
+      dirOUT: "CDR_SG/TRANSMITIDOSKAFKA/NORMAL"
+      # -- Temporizador para considerar un fichero activo (y no enviarlo a Kafka)
+      tmoutActivo: 60
+      # -- Tamaño maximo del fichero que se puede enviar. Debe coincidir con lo que se haya configurado en kafka, en el topic
+      #    y en el tamaño que maneja el GENCDR
+      maxBytes: "10000000"
+#    hotbilling:
+#      broker: "kafka-headless.default"
+#      topic: "cdrshb"
+#      dirIN: "CDR_SG/TRANSMITIDOS/HOTBILLING"
+#      dirOUT: "CDR_SG/TRANSMITIDOSKAFKA/HOTBILLING"
+#      tmoutActivo: 60
+#      maxBytes: "10000000"
+

@@ -1,0 +1,131 @@
+{{- if .Values.enabled }}
+# {{- (include "aachart.entorno" .) -}}
+#
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "aachart.fullname" . }}
+  labels:
+    {{- include "aachart.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{ include "aachart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+         {{- include "aachart.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "aachart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: oracle-secret-volume
+          secret:
+            secretName: oracle-secret
+        - name: counters-volume
+          emptyDir: {}
+        - name: dshm
+          persistentVolumeClaim:
+            claimName: shm-pvc
+
+      containers:
+        - name: proceso
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.sharedconfman.image.repository }}{{ $.Values.sharedconfman.image.imageName }}:{{  default $.Chart.AppVersion $.Values.sharedconfman.image.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.sharedconfman.image.pullPolicy }}
+          terminationMessagePath: /export/manager/termination.log
+          volumeMounts:
+          - name: oracle-secret-volume
+            mountPath: /export/manager/passdir
+            readOnly: true
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false 
+          - name: dshm
+            mountPath: /dev/shm
+          env:
+          {{- range $name, $item := $.Values.env }}
+          - name: {{ $name }}
+            {{- $item | toYaml | nindent 12 }}
+          {{- end  }}
+          - name: CNF_ZMQ_CLAVE_PRIVADA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PRIVADA
+          - name: CNF_ZMQ_CLAVE_PUBLICA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PUBLICA
+          - name: BD_USER
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_USER
+          - name: BD_NAME
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_NAME
+          - name: FUNCIONALIDAD
+            value: "{{ $.Values.sharedconfman.funcionalidad }}"
+          - name: FUNCIONALIDAD_ID
+            value: "{{ $.Values.sharedconfman.funcionalidadId }}"
+          - name: INSTANCIA
+            value: "0"
+          - name:  IP_WORKER
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/livenessProbe.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/readinessProbe.sh
+            periodSeconds: 5
+
+          startupProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/startupProbe.sh
+            initialDelaySeconds: {{ $.Values.sharedconfman.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ $.Values.sharedconfman.startupProbe.periodSeconds }}
+            failureThreshold: {{ $.Values.sharedconfman.startupProbe.failureThreshold }}
+          resources:
+            {{- toYaml $.Values.sharedconfman.resources | nindent 12 }}
+        - name: exporter
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.exporter.image.repository }}{{ $.Values.exporter.image.imageName }}:{{ $.Values.exporter.image.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.exporter.image.pullPolicy }}
+          ports:
+          - name: prometheus
+            containerPort: 9100
+            protocol: TCP
+          volumeMounts:
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false
+          resources:
+            {{- toYaml .Values.exporter.resources | nindent 12 }}
+
+{{- end }}

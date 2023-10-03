@@ -1,0 +1,954 @@
+{{- if .Values.enabled }}
+# {{- (include "aachart.entorno" .) -}}
+#
+{{- if .Values.diam3gpp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aachart.fullname" . }}-{{ lower .Values.diam3gpp.funcionalidad }}-ifz
+  labels:
+    {{- include "aachart.labels.ifz" . | nindent 4 }}
+    app.kubernetes.io/func: {{ lower .Values.diam3gpp.funcionalidad }}
+spec:
+  replicas: {{ .Values.diam3gpp.replicaCount1 }}
+  selector:
+    matchLabels:
+      {{- include "aachart.selectorLabels.ifz" . | nindent 6 }}
+      app.kubernetes.io/func: {{ lower .Values.diam3gpp.funcionalidad }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "aachart.selectorLabels.ifz" . | nindent 8 }}
+        app.kubernetes.io/func: {{ lower .Values.diam3gpp.funcionalidad }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aachart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: oracle-secret-volume
+          secret:
+            secretName: oracle-secret
+        - name: counters-volume
+          emptyDir: {}
+        {{- if .Values.bcargaConfigmap }}
+        - name: bcarga-volume
+          configMap:
+            name: {{ .Values.bcargaConfigmap }}
+        {{- end }}
+      containers:
+        {{- range $id, $ed := until (.Values.diam3gpp.instanciaCount1 | int) }}
+        - name: proceso{{ $id }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.diamdatos.image.repository }}{{ $.Values.diamdatos.image.imageName }}:{{  default $.Chart.AppVersion $.Values.diamdatos.image.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.diamdatos.image.pullPolicy }}
+          terminationMessagePath: /export/manager/termination.log
+          volumeMounts:
+          - name: oracle-secret-volume
+            mountPath: /export/manager/passdir
+            readOnly: true
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false 
+          {{- if $.Values.bcargaConfigmap }}
+          - name: bcarga-volume
+            mountPath: /export/manager/bcarga
+          {{- end }}
+
+          env:
+          {{- range $name, $item := $.Values.env }}
+          - name: {{ $name }}
+            {{- $item | toYaml | nindent 12 }}
+          {{- end  }}
+          - name:  CNF_DIAMETER_MODO_2CAPAS
+            value: "1"
+          - name: CNF_TRATAMIENTO_SIGTERM_CLOUD
+            value: "1"
+          - name: CNF_ZMQ_CLAVE_PRIVADA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PRIVADA
+          - name: CNF_ZMQ_CLAVE_PUBLICA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PUBLICA
+          - name: BD_USER
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_USER
+          - name: BD_NAME
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_NAME
+          - name: FUNCIONALIDAD
+            value: "{{ $.Values.diam3gpp.funcionalidad }}"
+          - name: FUNCIONALIDAD_ID
+            value: "{{ $.Values.diam3gpp.funcionalidad_id }}"
+          - name: INSTANCIA
+            value: "{{ $ed }}"
+          - name:  IP_WORKER
+            valueFrom:
+              fieldRef:
+                 fieldPath: status.hostIP
+
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/livenessProbe.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/readinessProbe2C.sh
+            periodSeconds: 5
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+        {{- end }}
+
+        - name: exporter
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.exporterImage.repository  }}{{ $.Values.exporterImage.imageName }}:{{ $.Values.exporterImage.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.exporterImage.pullPolicy }}
+          ports:
+          - name: prometheus
+            containerPort: 9100
+            protocol: TCP
+          volumeMounts:
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false
+          resources:
+            limits:
+              cpu: "50m"
+              memory: "15Mi"
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aachart.fullname" . }}-{{ lower .Values.diam3gpp.funcionalidad}}-proc
+  labels:
+    {{- include "aachart.labels.proc" . | nindent 4 }}
+    app.kubernetes.io/func: {{ lower .Values.diam3gpp.funcionalidad }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.diam3gpp.replicaCount2 }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge:  25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "aachart.selectorLabels.proc" . | nindent 6 }}
+      app.kubernetes.io/func: {{ lower .Values.diam3gpp.funcionalidad }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "aachart.selectorLabels.proc" . | nindent 8 }}
+        app.kubernetes.io/func: {{ lower .Values.diam3gpp.funcionalidad }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aachart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: oracle-secret-volume
+          secret:
+            secretName: oracle-secret
+        - name: counters-volume
+          emptyDir: {}
+        {{- if .Values.bcargaConfigmap }}
+        - name: bcarga-volume
+          configMap:
+            name: {{ .Values.bcargaConfigmap }}
+        {{- end }}
+      containers:
+        {{- range $id, $ed := until (.Values.diam3gpp.instanciaCount2 | int) }}
+        - name: proceso{{ $id }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.diamdatos.image.repository }}{{ $.Values.diamdatos.image.imageName }}:{{  default $.Chart.AppVersion $.Values.diamdatos.image.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.diamdatos.image.pullPolicy }}
+          terminationMessagePath: /export/manager/termination.log
+          volumeMounts:
+          - name: oracle-secret-volume
+            mountPath: /export/manager/passdir
+            readOnly: true
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false 
+          {{- if $.Values.bcargaConfigmap }}
+          - name: bcarga-volume
+            mountPath: /export/manager/bcarga
+          {{- end }}
+
+          env:
+          {{- range $name, $item := $.Values.env }}
+          - name: {{ $name }}
+            {{- $item | toYaml | nindent 12 }}
+          {{- end  }}
+          - name:  CNF_DIAMETER_MODO_2CAPAS
+            value: "2"
+          - name: CNF_TRATAMIENTO_SIGTERM_CLOUD
+            value: "2"
+          - name: CNF_ZMQ_CLAVE_PRIVADA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PRIVADA
+          - name: CNF_ZMQ_CLAVE_PUBLICA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PUBLICA
+          - name: BD_USER
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_USER
+          - name: BD_NAME
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_NAME
+          - name: FUNCIONALIDAD
+            value: "{{ $.Values.diam3gpp.funcionalidad }}"
+          - name: FUNCIONALIDAD_ID
+            value: "{{ $.Values.diam3gpp.funcionalidad_id }}"
+          - name: INSTANCIA
+            value: "{{ $ed }}"
+          - name:  IP_WORKER
+            valueFrom:
+              fieldRef:
+                 fieldPath: status.hostIP
+
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/livenessProbe.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/readinessProbe2C.sh
+            periodSeconds: 5
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+        {{- end }}
+
+        - name: exporter
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.exporterImage.repository  }}{{ $.Values.exporterImage.imageName }}:{{ $.Values.exporterImage.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.exporterImage.pullPolicy }}
+          ports:
+          - name: prometheus
+            containerPort: 9100
+            protocol: TCP
+          volumeMounts:
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false
+          resources:
+            limits:
+              cpu: "50m"
+              memory: "15Mi"
+
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+------
+{{- if .Values.diamsim3gpp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aachart.fullname" . }}-{{ lower .Values.diamsim3gpp.funcionalidad }}-ifz
+  labels:
+    {{- include "aachart.labels.ifz" . | nindent 4 }}
+    app.kubernetes.io/func: {{ lower .Values.diamsim3gpp.funcionalidad }}
+spec:
+  replicas: {{ .Values.diamsim3gpp.replicaCount1 }}
+  selector:
+    matchLabels:
+      {{- include "aachart.selectorLabels.ifz" . | nindent 6 }}
+      app.kubernetes.io/func: {{ lower .Values.diamsim3gpp.funcionalidad }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "aachart.selectorLabels.ifz" . | nindent 8 }}
+        app.kubernetes.io/func: {{ lower .Values.diamsim3gpp.funcionalidad }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aachart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: oracle-secret-volume
+          secret:
+            secretName: oracle-secret
+        - name: counters-volume
+          emptyDir: {}
+        {{- if .Values.bcargaConfigmap }}
+        - name: bcarga-volume
+          configMap:
+            name: {{ .Values.bcargaConfigmap }}
+        {{- end }}
+      containers:
+        {{- range $id, $ed := until (.Values.diamsim3gpp.instanciaCount1 | int) }}
+        - name: proceso{{ $id }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.diamdatos.image.repository }}{{ $.Values.diamdatos.image.imageName }}:{{  default $.Chart.AppVersion $.Values.diamdatos.image.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.diamdatos.image.pullPolicy }}
+          terminationMessagePath: /export/manager/termination.log
+          volumeMounts:
+          - name: oracle-secret-volume
+            mountPath: /export/manager/passdir
+            readOnly: true
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false 
+          {{- if $.Values.bcargaConfigmap }}
+          - name: bcarga-volume
+            mountPath: /export/manager/bcarga
+          {{- end }}
+
+          env:
+          {{- range $name, $item := $.Values.env }}
+          - name: {{ $name }}
+            {{- $item | toYaml | nindent 12 }}
+          {{- end  }}
+          - name:  CNF_DIAMETER_MODO_2CAPAS
+            value: "1"
+          - name: CNF_TRATAMIENTO_SIGTERM_CLOUD
+            value: "1"
+          - name: CNF_ZMQ_CLAVE_PRIVADA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PRIVADA
+          - name: CNF_ZMQ_CLAVE_PUBLICA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PUBLICA
+          - name: BD_USER
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_USER
+          - name: BD_NAME
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_NAME
+          - name: FUNCIONALIDAD
+            value: "{{ $.Values.diamsim3gpp.funcionalidad }}"
+          - name: FUNCIONALIDAD_ID
+            value: "{{ $.Values.diamsim3gpp.funcionalidad_id }}"
+          - name: CNF_ACTIVAR_MULTISIM
+            value: "SI"
+          - name: INSTANCIA
+            value: "{{ $ed }}"
+          - name:  IP_WORKER
+            valueFrom:
+              fieldRef:
+                 fieldPath: status.hostIP
+
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/livenessProbe.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/readinessProbe2C.sh
+            periodSeconds: 5
+
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+        {{- end }}
+
+        - name: exporter
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.exporterImage.repository  }}{{ $.Values.exporterImage.imageName }}:{{ $.Values.exporterImage.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.exporterImage.pullPolicy }}
+          ports:
+          - name: prometheus
+            containerPort: 9100
+            protocol: TCP
+          volumeMounts:
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false
+          resources:
+            limits:
+              cpu: "50m"
+              memory: "10Mi"
+
+
+       {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aachart.fullname" . }}-{{ lower .Values.diamsim3gpp.funcionalidad}}-proc
+  labels:
+    {{- include "aachart.labels.proc" . | nindent 4 }}
+    app.kubernetes.io/func: {{ lower .Values.diamsim3gpp.funcionalidad }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.diamsim3gpp.replicaCount2 }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge:  25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "aachart.selectorLabels.proc" . | nindent 6 }}
+      app.kubernetes.io/func: {{ lower .Values.diamsim3gpp.funcionalidad }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "aachart.selectorLabels.proc" . | nindent 8 }}
+        app.kubernetes.io/func: {{ lower .Values.diamsim3gpp.funcionalidad }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aachart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: oracle-secret-volume
+          secret:
+            secretName: oracle-secret
+        - name: counters-volume
+          emptyDir: {}
+        {{- if .Values.bcargaConfigmap }}
+        - name: bcarga-volume
+          configMap:
+            name: {{ .Values.bcargaConfigmap }}
+        {{- end }}
+      containers:
+        {{- range $id, $ed := until (.Values.diamsim3gpp.instanciaCount2 | int) }}
+        - name: proceso{{ $id }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.diamdatos.image.repository }}{{ $.Values.diamdatos.image.imageName }}:{{  default $.Chart.AppVersion $.Values.diamdatos.image.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.diamdatos.image.pullPolicy }}
+          terminationMessagePath: /export/manager/termination.log
+          volumeMounts:
+          - name: oracle-secret-volume
+            mountPath: /export/manager/passdir
+            readOnly: true
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false 
+          {{- if $.Values.bcargaConfigmap }}
+          - name: bcarga-volume
+            mountPath: /export/manager/bcarga
+          {{- end }}
+
+          env:
+          {{- range $name, $item := $.Values.env }}
+          - name: {{ $name }}
+            {{- $item | toYaml | nindent 12 }}
+          {{- end  }}
+          - name:  CNF_DIAMETER_MODO_2CAPAS
+            value: "2"
+          - name: CNF_TRATAMIENTO_SIGTERM_CLOUD
+            value: "2"
+          - name: CNF_ZMQ_CLAVE_PRIVADA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PRIVADA
+          - name: CNF_ZMQ_CLAVE_PUBLICA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PUBLICA
+          - name: BD_USER
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_USER
+          - name: BD_NAME
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_NAME
+          - name: FUNCIONALIDAD
+            value: "{{ $.Values.diamsim3gpp.funcionalidad }}"
+          - name: FUNCIONALIDAD_ID
+            value: "{{ $.Values.diamsim3gpp.funcionalidad_id }}"
+          - name: CNF_ACTIVAR_MULTISIM
+            value: "SI"
+          - name: INSTANCIA
+            value: "{{ $ed }}"
+          - name:  IP_WORKER
+            valueFrom:
+              fieldRef:
+                 fieldPath: status.hostIP
+
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/livenessProbe.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/readinessProbe2C.sh
+            periodSeconds: 5
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+        {{- end }}
+
+        - name: exporter
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.exporterImage.repository  }}{{ $.Values.exporterImage.imageName }}:{{ $.Values.exporterImage.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.exporterImage.pullPolicy }}
+          ports:
+          - name: prometheus
+            containerPort: 9100
+            protocol: TCP
+          volumeMounts:
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false
+          resources:
+            limits:
+              cpu: "50m"
+              memory: "10Mi"
+
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+------
+{{- if .Values.diamshared3gpp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aachart.fullname" . }}-{{ lower .Values.diamshared3gpp.funcionalidad }}-ifz
+  labels:
+    {{- include "aachart.labels.ifz" . | nindent 4 }}
+    app.kubernetes.io/func: {{ lower .Values.diamshared3gpp.funcionalidad }}
+spec:
+  replicas: {{ .Values.diamshared3gpp.replicaCount1 }}
+  selector:
+    matchLabels:
+      {{- include "aachart.selectorLabels.ifz" . | nindent 6 }}
+      app.kubernetes.io/func: {{ lower .Values.diamshared3gpp.funcionalidad }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "aachart.selectorLabels.ifz" . | nindent 8 }}
+        app.kubernetes.io/func: {{ lower .Values.diamshared3gpp.funcionalidad }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aachart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: oracle-secret-volume
+          secret:
+            secretName: oracle-secret
+        - name: counters-volume
+          emptyDir: {}
+        {{- if .Values.bcargaConfigmap }}
+        - name: bcarga-volume
+          configMap:
+            name: {{ .Values.bcargaConfigmap }}
+        {{- end }}
+      containers:
+        {{- range $id, $ed := until (.Values.diamshared3gpp.instanciaCount1 | int) }}
+        - name: proceso{{ $id }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.diamdatos.image.repository }}{{ $.Values.diamdatos.image.imageName }}:{{  default $.Chart.AppVersion $.Values.diamdatos.image.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.diamdatos.image.pullPolicy }}
+          terminationMessagePath: /export/manager/termination.log
+          volumeMounts:
+          - name: oracle-secret-volume
+            mountPath: /export/manager/passdir
+            readOnly: true
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false 
+          {{- if $.Values.bcargaConfigmap }}
+          - name: bcarga-volume
+            mountPath: /export/manager/bcarga
+          {{- end }}
+
+          env:
+          {{- range $name, $item := $.Values.env }}
+          - name: {{ $name }}
+            {{- $item | toYaml | nindent 12 }}
+          {{- end  }}
+          - name:  CNF_DIAMETER_MODO_2CAPAS
+            value: "1"
+          - name: CNF_TRATAMIENTO_SIGTERM_CLOUD
+            value: "1"
+          - name: CNF_ZMQ_CLAVE_PRIVADA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PRIVADA
+          - name: CNF_ZMQ_CLAVE_PUBLICA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PUBLICA
+          - name: BD_USER
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_USER
+          - name: BD_NAME
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_NAME
+          - name: FUNCIONALIDAD
+            value: "{{ $.Values.diamshared3gpp.funcionalidad }}"
+          - name: FUNCIONALIDAD_ID
+            value: "{{ $.Values.diamshared3gpp.funcionalidad_id }}"
+          - name: CNF_ACTIVAR_MULTISIM
+            value: "SI"
+          - name: INSTANCIA
+            value: "{{ $ed }}"
+          - name:  IP_WORKER
+            valueFrom:
+              fieldRef:
+                 fieldPath: status.hostIP
+
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/livenessProbe.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/readinessProbe2C.sh
+            periodSeconds: 5
+
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+        {{- end }}
+
+        - name: exporter
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.exporterImage.repository  }}{{ $.Values.exporterImage.imageName }}:{{ $.Values.exporterImage.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.exporterImage.pullPolicy }}
+          ports:
+          - name: prometheus
+            containerPort: 9100
+            protocol: TCP
+          volumeMounts:
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false
+          resources:
+            limits:
+              cpu: "50m"
+              memory: "10Mi"
+
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aachart.fullname" . }}-{{ lower .Values.diamshared3gpp.funcionalidad}}-proc
+  labels:
+    {{- include "aachart.labels.proc" . | nindent 4 }}
+    app.kubernetes.io/func: {{ lower .Values.diamshared3gpp.funcionalidad }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.diamshared3gpp.replicaCount2 }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge:  25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "aachart.selectorLabels.proc" . | nindent 6 }}
+      app.kubernetes.io/func: {{ lower .Values.diamshared3gpp.funcionalidad }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "aachart.selectorLabels.proc" . | nindent 8 }}
+        app.kubernetes.io/func: {{ lower .Values.diamshared3gpp.funcionalidad }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aachart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: oracle-secret-volume
+          secret:
+            secretName: oracle-secret
+        - name: counters-volume
+          emptyDir: {}
+        {{- if .Values.bcargaConfigmap }}
+        - name: bcarga-volume
+          configMap:
+            name: {{ .Values.bcargaConfigmap }}
+        {{- end }}
+      containers:
+        {{- range $id, $ed := until (.Values.diamshared3gpp.instanciaCount2 | int) }}
+        - name: proceso{{ $id }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.diamdatos.image.repository }}{{ $.Values.diamdatos.image.imageName }}:{{  default $.Chart.AppVersion $.Values.diamdatos.image.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.diamdatos.image.pullPolicy }}
+          terminationMessagePath: /export/manager/termination.log
+          volumeMounts:
+          - name: oracle-secret-volume
+            mountPath: /export/manager/passdir
+            readOnly: true
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false 
+          {{- if $.Values.bcargaConfigmap }}
+          - name: bcarga-volume
+            mountPath: /export/manager/bcarga
+          {{- end }}
+
+          env:
+          {{- range $name, $item := $.Values.env }}
+          - name: {{ $name }}
+            {{- $item | toYaml | nindent 12 }}
+          {{- end  }}
+          - name:  CNF_DIAMETER_MODO_2CAPAS
+            value: "2"
+          - name: CNF_TRATAMIENTO_SIGTERM_CLOUD
+            value: "2"
+          - name: CNF_ZMQ_CLAVE_PRIVADA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PRIVADA
+          - name: CNF_ZMQ_CLAVE_PUBLICA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PUBLICA
+          - name: BD_USER
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_USER
+          - name: BD_NAME
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_NAME
+          - name: FUNCIONALIDAD
+            value: "{{ $.Values.diamshared3gpp.funcionalidad }}"
+          - name: FUNCIONALIDAD_ID
+            value: "{{ $.Values.diamshared3gpp.funcionalidad_id }}"
+          - name: CNF_ACTIVAR_MULTISIM
+            value: "SI"
+          - name: INSTANCIA
+            value: "{{ $ed }}"
+          - name:  IP_WORKER
+            valueFrom:
+              fieldRef:
+                 fieldPath: status.hostIP
+
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/livenessProbe.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/readinessProbe2C.sh
+            periodSeconds: 5
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+        {{- end }}
+
+        - name: exporter
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.exporterImage.repository  }}{{ $.Values.exporterImage.imageName }}:{{ $.Values.exporterImage.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.exporterImage.pullPolicy }}
+          ports:
+          - name: prometheus
+            containerPort: 9100
+            protocol: TCP
+          volumeMounts:
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false
+          resources:
+            limits:
+              cpu: "50m"
+              memory: "10Mi"
+
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

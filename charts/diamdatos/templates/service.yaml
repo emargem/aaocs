@@ -1,0 +1,67 @@
+{{- if .Values.enabled }}
+{{- if .Values.diam3gpp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aachart.fullname" . }}-{{ lower .Values.diam3gpp.funcionalidad }}
+  labels:
+    {{- include "aachart.labels.ifz" . | nindent 4 }}
+spec:
+  type: {{ .Values.diam3gpp.service.type }}
+  ports:
+    - port: {{ .Values.diam3gpp.service.port }}
+      {{- if .Values.diam3gpp.service.nodePort }}
+      nodePort: {{ .Values.diam3gpp.service.nodePort }}
+      {{- end }}
+      targetPort: 3890
+      protocol: TCP
+      name: diameterdatos-service
+  selector:
+    {{- include "aachart.selectorLabels.ifz" . | nindent 4 }}
+    app.kubernetes.io/func: {{ lower .Values.diam3gpp.funcionalidad }}
+{{- end }}
+---
+{{- if .Values.diamsim3gpp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aachart.fullname" . }}-{{ lower .Values.diamsim3gpp.funcionalidad }}
+  labels:
+    {{- include "aachart.labels.ifz" . | nindent 4 }}
+spec:
+  type: {{ .Values.diamsim3gpp.service.type }}
+  ports:
+    - port: {{ .Values.diamsim3gpp.service.port }}
+      {{- if .Values.diamsim3gpp.service.nodePort }}
+      nodePort: {{ .Values.diamsim3gpp.service.nodePort }}
+      {{- end }}
+      targetPort: 3890
+      protocol: TCP
+      name: diameterdatos-service
+  selector:
+    {{- include "aachart.selectorLabels.ifz" . | nindent 4 }}
+    app.kubernetes.io/func: {{ lower .Values.diamsim3gpp.funcionalidad }}
+{{- end }}
+---
+{{- if .Values.diamshared3gpp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aachart.fullname" . }}-{{ lower .Values.diamshared3gpp.funcionalidad }}
+  labels:
+    {{- include "aachart.labels.ifz" . | nindent 4 }}
+spec:
+  type: {{ .Values.diamshared3gpp.service.type }}
+  ports:
+    - port: {{ .Values.diamshared3gpp.service.port }}
+      {{- if .Values.diamshared3gpp.service.nodePort }}
+      nodePort: {{ .Values.diamshared3gpp.service.nodePort }}
+      {{- end }}
+      targetPort: 3890
+      protocol: TCP
+      name: diameterdatos-service
+  selector:
+    {{- include "aachart.selectorLabels.ifz" . | nindent 4 }}
+    app.kubernetes.io/func: {{ lower .Values.diamshared3gpp.funcionalidad }}
+{{- end }}
+{{- end }}

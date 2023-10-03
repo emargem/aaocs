@@ -1,0 +1,15 @@
+apiVersion: v2
+name: simgencdr
+description: simgencdr
+
+# application | library
+type: application
+
+# This is the chart version. Semantic Versioning (https://semver.org/)
+version: 1.0.0
+
+# This is the version number of the application being deployed.
+appVersion: "1.0.0"
+
+dependencies:
+

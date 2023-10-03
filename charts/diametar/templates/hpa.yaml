@@ -1,0 +1,35 @@
+{{- if .Values.enabled }}
+{{- if .Values.autoscaling.enabled }}
+{{- if .Values.autoscaling.versionAPIv1 }}
+apiVersion: autoscaling/v1
+{{- else }}
+apiVersion: autoscaling/v2beta1
+{{- end }}
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "aachart.fullname" . }}-{{ lower .Values.diametar.funcionalidad | replace "_" "-"}}-hpa
+  labels:
+    {{- include "aachart.labels" . | nindent 4 }}
+    app.kubernetes.io/func: {{ lower .Values.diametar.funcionalidad | replace "_" "-"}}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "aachart.fullname" . }}-{{ lower .Values.diametar.funcionalidad | replace "_" "-"}}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  {{- if .Values.autoscaling.versionAPIv1 }}
+  {{- if .Values.autoscaling.targetCPUUtilizationValuev1 }}
+  targetCPUUtilizationPercentage: {{ .Values.autoscaling.targetCPUUtilizationValuev1 }}
+  {{- end }}
+  {{- else }}
+  metrics:
+    {{- if .Values.autoscaling.targetCPUUtilizationValue }}
+    - type: Resource
+      resource:
+        name: cpu
+        targetAverageValue: {{ .Values.autoscaling.targetCPUUtilizationValue }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}

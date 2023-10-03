@@ -1,0 +1,24 @@
+AA Services
+=============
+
+You have deployed the following services:
+
+{{ range .Chart.Dependencies }}
+  {{ .Name }}
+{{ end }}
+
+----------------------
+Uninstall/delete steps
+----------------------
+  - Delete the helm installation
+    
+    helm 3:  helm uninstall {{ .Release.Name }}
+
+  - There are underlying kubernetes objects(related to secret and volumes), which need to be manually deleted
+
+      kubectl get secret,pvc,pv -n {{ .Release.Namespace }}
+
+  - Then delete the respective component from above list
+
+      kubectl delete <k8 object type>/<k8 object name> -n {{ .Release.Namespace }}
+

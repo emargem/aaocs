@@ -1,0 +1,168 @@
+{{- if .Values.enabled }}
+# {{- (include "aachart.entorno" .) -}}
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aachart.fullname" . }}
+  labels:
+    {{- include "aachart.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.disteventos.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "aachart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "aachart.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aachart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: oracle-secret-volume
+          secret:
+            secretName: oracle-secret
+        - name: counters-volume
+          emptyDir: {}
+        - name: events-volume
+          persistentVolumeClaim:
+          {{- if not .Values.pvc.pvcExistente }}
+            claimName: {{ lower .Values.disteventos.funcionalidad | replace "_" "-"}}-pvc
+          {{- else }}
+            claimName: {{ lower .Values.pvc.pvcExistente }}
+          {{- end }}
+      initContainers:
+        - resources: {}
+          terminationMessagePath: /dev/termination-log
+          name: nfs-fixer
+          command:
+            - sh
+            - '-c'
+            - >-
+              (chmod 0775 /export/manager/events; chown 500
+              /export/manager/events && echo "chown success"; chgrp 500
+              /export/manager/events && echo "Done")
+          securityContext:
+            runAsUser: 0
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: events-volume
+              mountPath: /export/manager/events
+          terminationMessagePolicy: File
+            #image: "{{ default $.Values.image.repository $.Values.exporter.image.repository }}{{ $.Values.exporter.image.imageName }}:{{ $.Values.exporter.image.tag }}"
+          image: "{{ default $.Values.image.repository $.Values.base.image.repository }}{{ $.Values.base.image.imageName }}:{{ $.Values.base.image.tag }}"
+      containers:
+        {{- range $id, $ed := until (.Values.disteventos.instanciaCount | int) }}
+        - name: proceso{{ $id }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.disteventos.image.repository}}{{ $.Values.disteventos.image.imageName }}:{{  default $.Chart.AppVersion $.Values.disteventos.image.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.disteventos.image.pullPolicy }}
+          terminationMessagePath: /export/manager/termination.log
+          volumeMounts:
+          - name: oracle-secret-volume
+            mountPath: /export/manager/passdir
+            readOnly: true
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false 
+          - name: events-volume
+            mountPath: /export/manager/events
+            readOnly: false
+          env:
+          {{- range $name, $item := $.Values.env }}
+          - name: {{ $name }}
+            {{- $item | toYaml | nindent 12 }}
+          {{- end  }}
+          - name: CNF_TRATAMIENTO_SIGTERM_CLOUD
+            value: "1"
+          - name: CNF_ZMQ_CLAVE_PRIVADA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PRIVADA
+          - name: CNF_ZMQ_CLAVE_PUBLICA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PUBLICA
+          - name: BD_USER
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_USER
+          - name: BD_NAME
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_NAME
+          - name: INSTANCIA
+            value: "{{ $ed }}"
+          - name: FUNCIONALIDAD
+            value: "{{ $.Values.disteventos.funcionalidad }}"
+          - name: FUNCIONALIDAD_ID
+            value: "{{ $.Values.disteventos.funcionalidad_id }}"
+          - name:  IP_WORKER
+            valueFrom:
+              fieldRef:
+                 fieldPath: status.hostIP
+
+          livenessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/livenessProbe.sh
+            initialDelaySeconds: 30
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/readinessProbe.sh
+            periodSeconds: 5
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+        {{- end }}
+        - name: exporter
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.exporter.image.repository }}{{ $.Values.exporter.image.imageName }}:{{ $.Values.exporter.image.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.exporter.image.pullPolicy }}
+          ports:
+          - name: prometheus
+            containerPort: 9100
+            protocol: TCP
+          volumeMounts:
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false
+          resources:
+            {{- toYaml .Values.exporter.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+{{- end }}

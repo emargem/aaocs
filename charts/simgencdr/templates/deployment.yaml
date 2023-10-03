@@ -1,0 +1,112 @@
+{{- if .Values.enabled }}
+# {{- (include "aachart.entorno" .) -}}
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aachart.fullname" . }}
+  labels:
+    {{- include "aachart.labels.ifz" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "aachart.selectorLabels.proc" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "aachart.selectorLabels.proc" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aachart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: oracle-secret-volume
+          secret:
+            secretName: oracle-secret
+        - name: counters-volume
+          emptyDir: {}
+      containers:
+        - name: proceso
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+            #          image: "zape-k8s-dockreg:5000/simgencdr:1"
+          image: "{{  $.Values.image.repository }}simgencdr:1"
+          imagePullPolicy: "Always"
+          terminationMessagePath: /export/manager/termination.log
+          volumeMounts:
+          - name: oracle-secret-volume
+            mountPath: /export/manager/passdir
+            readOnly: true
+          - name: counters-volume
+            mountPath: /export/manager/contadores
+            readOnly: false 
+
+          env:
+          {{- range $name, $item := $.Values.env }}
+          - name: {{ $name }}
+            {{- $item | toYaml | nindent 12 }}
+          {{- end  }}
+          - name: CNF_TRATAMIENTO_SIGTERM_CLOUD
+            value: "0"
+          - name: CNF_ZMQ_CLAVE_PRIVADA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PRIVADA
+          - name: CNF_ZMQ_CLAVE_PUBLICA
+            valueFrom:
+              secretKeyRef:
+                name: zmq-secret
+                key: CLAVE_PUBLICA
+          - name: BD_USER
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_USER
+          - name: BD_NAME
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_NAME
+          - name: FUNCIONALIDAD
+            value: "GENCDR_TEST"
+          - name: FUNCIONALIDAD_ID
+            value: "9999"
+          - name:  IP_WORKER
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - /export/manager/readinessProbe.sh
+            periodSeconds: 5
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+

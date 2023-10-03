@@ -1,0 +1,61 @@
+{{- if .Values.enabled }}
+# {{- (include "aachart.entorno" .) -}}
+#
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "aachart.fullname" . }}-reload-monitor
+  labels:
+    {{- include "aachart.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      name: reload-monitor
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        name: reload-monitor
+    spec:
+      serviceAccountName: {{ include "aachart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: oracle-secret-volume
+          secret:
+            secretName: oracle-secret
+      containers:
+        - name: reload-monitor
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ default $.Values.image.repository $.Values.reloadMonitorImage.repository }}{{ $.Values.reloadMonitorImage.imageName }}:{{  default $.Chart.AppVersion $.Values.reloadMonitorImage.tag }}"
+          imagePullPolicy: {{ default $.Values.image.pullPolicy $.Values.reloadMonitorImage.pullPolicy }}
+          terminationMessagePath: /export/manager/termination.log
+          ports:
+          - name: prometheus
+            containerPort: 9100
+            protocol: TCP
+          volumeMounts:
+          - name: oracle-secret-volume
+            mountPath: /export/manager/passdir
+            readOnly: true
+          env:
+          {{- range $name, $item := $.Values.env }}
+          - name: {{ $name }}
+            {{- $item | toYaml | nindent 12 }}
+          {{- end  }}
+          - name: BD_NAME
+            valueFrom:
+              secretKeyRef:
+                name: oracle-secret
+                key: BD_NAME
+          - name:  IP_WORKER
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: USO_CONTADORES
+            value: "0"
+{{- end }}

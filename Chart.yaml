@@ -15,19 +15,3 @@ dependencies:
 - condition: disteventos.enabled
   name: disteventos
   version: '>0.0.0-0'
-- condition: cdrs.enabled
-  name: cdrs
-  version: '>0.0.0-0'
-- condition: diametar.enabled
-  name: diametar
-  version: '>0.0.0-0'
-- condition: diamdatos.enabled
-  name: diamdatos
-  version: '>0.0.0-0'
-- condition: sharedconfman.enabled
-  name: sharedconfman
-  version: '>0.0.0-0'
-- condition: monitor.enabled
-  name: monitor
-  version: '>0.0.0-0'
-

@@ -1,20 +1,15 @@
 apiVersion: v2
-name: aa
-description: aa
+name: monitor
+description: "Helm Chart para instalar el monitor de relecturas"
 
 # application | library
 type: application
 
 # This is the chart version. Semantic Versioning (https://semver.org/)
-version: 13.3.1-2
+version: 1.0.1
 
 # This is the version number of the application being deployed.
-appVersion: "13.3.1-2"
+appVersion: "1.0.1"
 
 dependencies:
-- condition: disteventos.enabled
-  name: disteventos
-  version: '>0.0.0-0'
-- condition: monitor.enabled
-  name: monitor
-  version: '>0.0.0-0'
+

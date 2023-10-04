@@ -12,7 +12,7 @@ global:
   #   value: <>
   image:
     # en este fichero de values, siempre vacio. Rellenar en user values si se quiere sobreescribir
-    repository: 
+    repository: zape-k8s-dockreg:5000/
     pullPolicy:
 
 disteventos:
